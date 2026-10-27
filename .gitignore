@@ -1,0 +1,9 @@
+# Local/runtime artifacts
+*.log
+*.zip
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini

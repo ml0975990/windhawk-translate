@@ -1,0 +1,25 @@
+{
+  "name": "windhawk-translate",
+  "displayName": "Windhawk Translate",
+  "description": "Real-time translation for the Windhawk UI (mod cards and mod details), with a persistent dictionary.",
+  "publisher": "local",
+  "version": "1.1.0",
+  "license": "MIT",
+  "engines": { "vscode": "^1.74.0" },
+  "categories": ["Other"],
+  "main": "./extension.js",
+  "activationEvents": ["*"],
+  "contributes": {
+    "commands": [
+      {
+        "command": "windhawkTranslate.status",
+        "title": "Windhawk Translate: Show status"
+      },
+      {
+        "command": "windhawkTranslate.repair",
+        "title": "Windhawk Translate: Re-apply UI patch"
+      }
+    ]
+  }
+}
+
