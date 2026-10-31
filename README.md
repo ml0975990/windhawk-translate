@@ -47,7 +47,7 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1 -WindhawkRoot "D:\Windhaw
 
 安装脚本会：
 
-1. 把伴生扩展复制到 `C:\ProgramData\Windhawk\UIData\extensions\local.windhawk-translate-1.1.0\`
+1. 把伴生扩展复制到 `C:\ProgramData\Windhawk\UIData\extensions\local.windhawk-translate-1.1.1\`
    并注册到同目录的 `extensions.json`（用户数据目录不参与 Windhawk 升级，扩展本身不会被覆盖）。
 2. 把页面脚本 `wh-translate.js` 复制到 webview 目录，并在 `index.html` 中注入一行
    `<script src="wh-translate.js?v=<内容哈希>"></script>`。
@@ -124,13 +124,19 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1 -WindhawkRoot "D:\Windhaw
 ```
 
 - **页面脚本**负责 DOM 识别与渲染。它按「单元」处理：卡片标题、卡片描述、详情标题、详情简介、
-  Markdown 块（`h1`–`h6`、`p`、`blockquote`、`li`、`td`）。译文节点带 `data-whtr-*` 标记，
+  Markdown 块（`h1`–`h6`、`p`、`blockquote`、`li`）。译文节点带 `data-whtr-*` 标记，
   扫描时会被排除，避免自我循环。
+- **只新增兄弟节点，绝不移动 React 的节点**：这是硬约束。React 会保留自己创建的子节点引用并调用
+  `insertBefore(newNode, refNode)`；一旦把 `refNode` 移到别处（例如包进一个 wrapper），就会抛
+  `Failed to execute 'insertBefore' ... is not a child of this node` 并把整个界面变成错误页。
+  因此译文一律作为**源元素前面的新兄弟节点**插入；「译文」模式用属性 + CSS（`display:none`）隐藏原文，
+  并把原块的计算样式（字号/字重/行高/外边距）复制到译文上，以保留标题层级与段落间距。
 - **免密钥服务**（Google/MyMemory）在页面里直接请求，走 Chromium 网络栈，因此**自动使用系统代理**。
 - **需要密钥的服务**（微软/必应、百度、阿里云、DeepL）由扩展宿主调用：它们没有 CORS 头，
   且密钥不应暴露在页面里；签名/鉴权在 Node 侧完成，结果同时写入字典。
-- **渲染方式**：卡片标题/描述、详情标题/简介把译文插在原文**前面**；README 的 Markdown 块把原文包进
-  `<span class="whtr-src">`，译文放在块内部最前面，因此 `h1` 的译文字号、`p` 的段距、`li` 的圆点都能保留。
+- **渲染方式**：所有译文都作为源元素**前面的兄弟节点**插入（`<li>` 的译文用一个新的 `<li>` 兄弟节点，
+  保留列表符号），不包裹、不移动任何 React 节点；「双语」模式下原文缩小到 85%，「译文」模式下原文隐藏、
+  译文继承原块的排版。
 - **样式**：通过 `--whtr-font/--whtr-size/--whtr-color/--whtr-lh` 四个 CSS 变量实时生效。
 
 ### 为什么更新后还能用
@@ -208,9 +214,27 @@ powershell -ExecutionPolicy Bypass -File .\uninstall.ps1 -Purge
 
 - **仅支持 VSCodium 界面（Windhawk 1.x）**。Windhawk 2.0 换成了原生 Tauri 界面（`windhawk-ui.exe`），
   本扩展不会加载（也不会造成任何影响）。如需支持 2.0，需要按新 UI 的 WebView2 注入方式另做一套。
-- 代码块（`pre`/`code`）、版本号、作者、进程名、Mod ID 不翻译。
+- 代码块（`pre`/`code`）、版本号、作者、进程名、Mod ID、表格单元格不翻译。
 - README 中的内联链接在「译文」模式下会变成纯文本（「双语」模式仍保留原文链接）。
+- 带子列表的 `<li>`（例如「可用图案」下面的分组）在「译文」模式下会同时保留原文，避免把子项一起隐藏。
 - 每个译文单元只翻译一次，之后都读字典；修改目标语言会重新走一遍（另一语言的字典分开存储）。
+
+---
+
+## 更新日志
+
+### v1.1.1（2026-10-31）
+
+- **修复**：安装 Mod 后界面出现 `Unexpected Application Error! Failed to execute 'insertBefore' ... is not a child of this node`。
+  原因是旧实现把 `<p>`/`<li>` 的子节点包进 `.whtr-src` wrapper，React 随后仍拿被移动的节点当 `insertBefore` 参考。
+  现在译文一律作为兄弟节点插入，不再包裹/移动任何 React 节点；「译文」模式改为属性隐藏 + 排版样式复制。
+
+### v1.1.0（2026-10-28）
+
+- 多翻译服务（微软/必应、百度、阿里云、DeepL + Google/MyMemory）
+- 译文样式设置（字体/字号/行距/颜色/竖线）
+- 双语改为「译文在上、原文在下并缩小」
+- 右侧折叠「译」胶囊
 
 ---
 
@@ -247,7 +271,7 @@ windhawk-translate/
 
 安装后运行时位置：
 
-- 扩展：`C:\ProgramData\Windhawk\UIData\extensions\local.windhawk-translate-1.1.0\`
+- 扩展：`C:\ProgramData\Windhawk\UIData\extensions\local.windhawk-translate-1.1.1\`
 - 数据：`C:\ProgramData\Windhawk\Translate\`
 - 注入：`G:\Windhawk\UI\resources\app\extensions\windhawk\webview\wh-translate.js`（+ `index.html` 一行 script）
 - CSP：`G:\Windhawk\UI\resources\app\extensions\windhawk\dist\extension.js` 中 `connect-src` 追加白名单
@@ -265,3 +289,6 @@ windhawk-translate/
 - 服务端链路：`/translate` 经扩展宿主调用 MyMemory 返回译文并写入字典，验证通过。
 - 字典：`dictionary.json` 持久化，重启后直接命中（无网络请求）。
 - 更新自愈：还原原始文件并删除注入脚本后重启，扩展自动重新打补丁、刷新窗口，翻译恢复。
+- v1.1.1 回归：走查 首页 → 浏览（滚动加载 30/60/90 张卡片）→ 详情 → 更新日志 → 源代码（Monaco）→ 返回 →
+  安装 Mod → 设置页 → 三种模式切换，全程无 `Unexpected Application Error`、无 console 异常；
+  安装 Mod 的完整流程（新增卡片、列表刷新）也不再触发 `insertBefore` 崩溃。

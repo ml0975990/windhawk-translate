@@ -12,7 +12,7 @@
 'use strict';
 
 (function () {
-  var VERSION = '1.1.0';
+  var VERSION = '1.1.1';
 
   if (window.__windhawkTranslate) return;
   window.__windhawkTranslate = { version: VERSION };
@@ -199,7 +199,7 @@
     if (!node) return false;
     var el = node.nodeType === 1 ? node : node.parentElement;
     if (!el || !el.closest) return false;
-    return !!el.closest('.whtr-bar,.whtr-pop,.whtr-fab,.whtr-tr,[data-whtr-src]');
+    return !!el.closest('.whtr-bar,.whtr-pop,.whtr-fab,.whtr-tr');
   }
 
   // ---------------------------------------------------------------------------
@@ -479,10 +479,10 @@
     '.whtr-tr.whtr-no-border{border-left:0;padding-left:0}',
     '[data-whtr-mode="original"] .whtr-tr{display:none !important}',
     '[data-whtr-mode="translated"] [data-whtr-hide="1"]{display:none !important}',
-    '[data-whtr-mode="translated"] .whtr-tr{border-left:0;padding-left:0;color:inherit;font-size:inherit;margin:0;display:block;font-family:inherit;line-height:inherit}',
-    '[data-whtr-mode="translated"] .whtr-src{display:none !important}',
+    '[data-whtr-mode="translated"] .whtr-tr{border-left:0;padding-left:0;color:inherit;margin:0;display:block;font-family:inherit}',
+    '.whtr-tr.whtr-li{display:list-item}',
+    '[data-whtr-mode="translated"] .whtr-tr.whtr-li{display:list-item}',
     '[data-whtr-mode="bilingual"] [data-whtr-orig="1"]{font-size:.85em;opacity:.82}',
-    '[data-whtr-mode="bilingual"] .whtr-src{font-size:.85em;opacity:.82}',
     '.whtr-fab{position:fixed;right:0;top:42%;z-index:2147483000;width:38px;height:46px;border-radius:10px 0 0 10px;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#4c8dff,#8b5cf6);color:#fff;font:700 15px/1 "Segoe UI","Microsoft YaHei",sans-serif;cursor:pointer;box-shadow:-2px 2px 14px rgba(0,0,0,.45);user-select:none;opacity:.9;transition:opacity .15s ease;}',
     '.whtr-fab:hover{opacity:1}',
     'body.whtr-open .whtr-fab{display:none}',
@@ -900,22 +900,36 @@
         buttons[i].classList.toggle('whtr-on', buttons[i].getAttribute('data-mode') === state.mode);
       }
     }
-    var units = state.registry;
-    units.forEach(function (unit) {
+    var hide = state.mode === 'translated';
+    state.registry.forEach(function (unit) {
       if (!unit.node || !unit.node.parentNode) return;
-      var hide = state.mode === 'translated';
-      if (unit.wrapped) {
-        unit.wrapped.style.display = hide ? 'none' : '';
-        return;
-      }
-      if (hide) {
-        unit.el.setAttribute('data-whtr-hide', '1');
-        unit.el.setAttribute('data-whtr-orig', '1');
-      } else {
-        unit.el.removeAttribute('data-whtr-hide');
-        unit.el.setAttribute('data-whtr-orig', '1');
-      }
+      // Only attributes and inline styles here: the source element itself is
+      // never moved or wrapped, so React keeps working.
+      if (hide && !unit.hasNestedList) unit.el.setAttribute('data-whtr-hide', '1');
+      else unit.el.removeAttribute('data-whtr-hide');
+      syncTypography(unit);
     });
+  }
+
+  // In "translated" mode the source block is hidden with display:none, so its
+  // typography is copied onto the translation to keep headings and paragraph
+  // spacing. Bilingual/original modes use the normal CSS.
+  function syncTypography(unit) {
+    if (!unit.node) return;
+    var style = unit.node.style;
+    style.fontSize = '';
+    style.fontWeight = '';
+    style.lineHeight = '';
+    style.margin = '';
+    if (state.mode !== 'translated' || !unit.isMarkdown) return;
+    try {
+      var cs = unit.el.ownerDocument.defaultView.getComputedStyle(unit.el);
+      if (!cs) return;
+      style.fontSize = cs.fontSize;
+      style.fontWeight = cs.fontWeight;
+      style.lineHeight = cs.lineHeight;
+      style.margin = cs.margin;
+    } catch (e) {}
   }
 
   function updateStatus() {
@@ -996,8 +1010,11 @@
       blocks.forEach(function (el) {
         if (el.closest('pre')) return;
         if (el.querySelector('pre')) return;
-        if (el.querySelector('img') && !normalize(el.textContent)) return;
-        var kind = el.tagName === 'LI' || el.tagName === 'TD' || el.tagName === 'TH' ? 'mdItem' : 'mdBlock';
+        // Table cells are skipped: their translation would have to live inside
+        // the cell, and hiding the cell would hide the translation too.
+        if (el.tagName === 'TD' || el.tagName === 'TH') return;
+        if (el.tagName !== 'LI' && el.querySelector('img') && !normalize(el.textContent)) return;
+        var kind = el.tagName === 'LI' ? 'mdItem' : 'mdBlock';
         found.push({ el: el, kind: kind });
       });
     });
@@ -1023,14 +1040,19 @@
     if (unit) {
       if (unit.text === text) return unit;
       if (unit.node && unit.node.parentNode) unit.node.parentNode.removeChild(unit.node);
-      if (unit.wrapped && unit.wrapped.parentNode) {
-        while (unit.wrapped.firstChild) unit.wrapped.parentNode.insertBefore(unit.wrapped.firstChild, unit.wrapped);
-        unit.wrapped.parentNode.removeChild(unit.wrapped);
-        unit.el.removeAttribute('data-whtr-orig');
-      }
+      unit.el.removeAttribute('data-whtr-orig');
       state.registry.delete(unit);
     }
-    unit = { el: el, kind: kind, text: text, key: keyFor(text), node: null, wrapped: null };
+    unit = {
+      el: el,
+      kind: kind,
+      text: text,
+      key: keyFor(text),
+      node: null,
+      // A list item with sub-items is never hidden: hiding it would hide the
+      // nested list as well (the sub-items are translated on their own).
+      hasNestedList: kind === 'mdItem' && !!el.querySelector('ul,ol'),
+    };
     state.units.set(el, unit);
     state.registry.add(unit);
     return unit;
@@ -1100,53 +1122,36 @@
   function renderUnit(unit, translation) {
     state.applying = true;
     try {
+      var isListItem = unit.kind === 'mdItem' && unit.el.tagName === 'LI';
       var node = unit.node;
       if (!node) {
-        node = doc.createElement('span');
-        node.className = 'whtr-tr' + (state.style.border === false ? ' whtr-no-border' : '');
+        // The translation is always a NEW sibling element. Never wrap, move or
+        // remove nodes that React owns: React keeps references to its own
+        // children and calls insertBefore() with them, which fails with
+        // "The node before which the new node is to be inserted is not a child
+        // of this node" once a child has been moved into a wrapper.
+        node = doc.createElement(isListItem ? 'li' : 'span');
+        node.className =
+          'whtr-tr' +
+          (isListItem ? ' whtr-li' : '') +
+          (state.style.border === false ? ' whtr-no-border' : '');
         node.setAttribute('data-whtr-tr', '1');
         node.setAttribute('data-whtr-key', unit.key);
         unit.node = node;
       }
       if (node.textContent !== translation) node.textContent = translation;
 
-      if (unit.kind === 'mdItem' || unit.kind === 'mdBlock') {
-        // Markdown blocks keep their own typography: the original content is
-        // wrapped in a span and the translation lives inside the block above
-        // it (so <h1> stays big, <p> keeps its margins, <li> its bullet).
-        if (!unit.wrapped) {
-          unit.wrapped = unit.el.querySelector(':scope > .whtr-src') || null;
-        }
-        if (!unit.wrapped) {
-          var wrap = doc.createElement('span');
-          wrap.setAttribute('data-whtr-src', '1');
-          wrap.className = 'whtr-src';
-          var anchor = null;
-          var kids = Array.prototype.slice.call(unit.el.childNodes);
-          for (var k = 0; k < kids.length; k++) {
-            var kid = kids[k];
-            if (kid.nodeType === 1 && (kid.tagName === 'UL' || kid.tagName === 'OL')) {
-              if (!anchor) anchor = kid;
-              continue;
-            }
-            wrap.appendChild(kid);
-          }
-          if (anchor) unit.el.insertBefore(wrap, anchor);
-          else unit.el.appendChild(wrap);
-          unit.wrapped = wrap;
-        }
-        removeStrayChildren(unit.el, node);
-        if (node.parentNode !== unit.el) unit.el.insertBefore(node, unit.wrapped);
-      } else {
-        var target = findAnchor(unit.el, unit.kind);
-        removeStrayBefore(target, node);
-        if (unit.el !== target) unit.el.setAttribute('data-whtr-orig', '1');
-        else unit.el.setAttribute('data-whtr-orig', '1');
-        if (!node.parentNode) {
-          if (target && target.parentNode) target.parentNode.insertBefore(node, target);
-          else if (target) target.appendChild(node);
-        }
+      unit.isMarkdown = unit.kind === 'mdBlock' || unit.kind === 'mdItem';
+      unit.el.setAttribute('data-whtr-orig', '1');
+
+      var target = findAnchor(unit.el, unit.kind);
+      removeStrayBefore(target, node);
+      if (!node.parentNode && target && target.parentNode) {
+        target.parentNode.insertBefore(node, target);
       }
+      syncTypography(unit);
+    } catch (e) {
+      log('render failed: ' + e.message);
     } finally {
       state.applying = false;
     }
@@ -1236,14 +1241,10 @@
     state.dict = new Map();
     state.registry.forEach(function (unit) {
       if (unit.node && unit.node.parentNode) unit.node.parentNode.removeChild(unit.node);
-      if (unit.wrapped && unit.wrapped.parentNode) {
-        while (unit.wrapped.firstChild) unit.wrapped.parentNode.insertBefore(unit.wrapped.firstChild, unit.wrapped);
-        unit.wrapped.parentNode.removeChild(unit.wrapped);
-      }
       unit.node = null;
-      unit.wrapped = null;
       unit.queued = false;
       unit.el.removeAttribute('data-whtr-orig');
+      unit.el.removeAttribute('data-whtr-hide');
     });
     state.registry = new Set();
     state.units = new WeakMap();
