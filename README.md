@@ -104,6 +104,8 @@ Windhawk 的搜索是**本地**按 Mod ID / 名称 / 描述做子串匹配，所
 
 更正后的条目在 `dictionary.json` 里 `p` 字段为 `manual`，之后不会再被机翻覆盖。
 
+![译文更正编辑框](docs/correction.png)
+
 ### 设置（⚙）
 
 | 分组 | 项目 |
