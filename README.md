@@ -47,7 +47,7 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1 -WindhawkRoot "D:\Windhaw
 
 安装脚本会：
 
-1. 把伴生扩展复制到 `C:\ProgramData\Windhawk\UIData\extensions\local.windhawk-translate-1.1.1\`
+1. 把伴生扩展复制到 `C:\ProgramData\Windhawk\UIData\extensions\local.windhawk-translate-1.1.2\`
    并注册到同目录的 `extensions.json`（用户数据目录不参与 Windhawk 升级，扩展本身不会被覆盖）。
 2. 把页面脚本 `wh-translate.js` 复制到 webview 目录，并在 `index.html` 中注入一行
    `<script src="wh-translate.js?v=<内容哈希>"></script>`。
@@ -217,11 +217,18 @@ powershell -ExecutionPolicy Bypass -File .\uninstall.ps1 -Purge
 - 代码块（`pre`/`code`）、版本号、作者、进程名、Mod ID、表格单元格不翻译。
 - README 中的内联链接在「译文」模式下会变成纯文本（「双语」模式仍保留原文链接）。
 - 带子列表的 `<li>`（例如「可用图案」下面的分组）在「译文」模式下会同时保留原文，避免把子项一起隐藏。
+- 含图片的块（例如主题截图 + 主题名）在「译文」模式下不隐藏原文，译文显示在图片上方，图片和图注保持可见。
 - 每个译文单元只翻译一次，之后都读字典；修改目标语言会重新走一遍（另一语言的字典分开存储）。
 
 ---
 
 ## 更新日志
+
+### v1.1.2（2026-10-31）
+
+- **修复**：「译文」模式下 Mod 详情里的图片消失。原因是图片与说明文字在同一个 `<p>` 里
+  （`<p><a><img><br>主题名</a></p>`），隐藏整个块把图片一起隐藏了。现在含图片的块永不隐藏，
+  译文显示在图片上方，图片与图注保留；纯文本块仍按原逻辑隐藏原文。
 
 ### v1.1.1（2026-10-31）
 
@@ -271,7 +278,7 @@ windhawk-translate/
 
 安装后运行时位置：
 
-- 扩展：`C:\ProgramData\Windhawk\UIData\extensions\local.windhawk-translate-1.1.1\`
+- 扩展：`C:\ProgramData\Windhawk\UIData\extensions\local.windhawk-translate-1.1.2\`
 - 数据：`C:\ProgramData\Windhawk\Translate\`
 - 注入：`G:\Windhawk\UI\resources\app\extensions\windhawk\webview\wh-translate.js`（+ `index.html` 一行 script）
 - CSP：`G:\Windhawk\UI\resources\app\extensions\windhawk\dist\extension.js` 中 `connect-src` 追加白名单

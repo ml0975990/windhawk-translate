@@ -12,7 +12,7 @@
 'use strict';
 
 (function () {
-  var VERSION = '1.1.1';
+  var VERSION = '1.1.2';
 
   if (window.__windhawkTranslate) return;
   window.__windhawkTranslate = { version: VERSION };
@@ -905,7 +905,7 @@
       if (!unit.node || !unit.node.parentNode) return;
       // Only attributes and inline styles here: the source element itself is
       // never moved or wrapped, so React keeps working.
-      if (hide && !unit.hasNestedList) unit.el.setAttribute('data-whtr-hide', '1');
+      if (hide && !unit.hasNestedList && !unit.hasImage) unit.el.setAttribute('data-whtr-hide', '1');
       else unit.el.removeAttribute('data-whtr-hide');
       syncTypography(unit);
     });
@@ -1052,6 +1052,9 @@
       // A list item with sub-items is never hidden: hiding it would hide the
       // nested list as well (the sub-items are translated on their own).
       hasNestedList: kind === 'mdItem' && !!el.querySelector('ul,ol'),
+      // A block that contains an image (e.g. a theme screenshot followed by
+      // its name) is never hidden either: hiding it would hide the image.
+      hasImage: !!el.querySelector('img'),
     };
     state.units.set(el, unit);
     state.registry.add(unit);
