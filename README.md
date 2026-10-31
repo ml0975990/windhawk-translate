@@ -22,6 +22,7 @@
 | 译文样式 | 字体、字号、行距、颜色、左侧竖线开关，全部实时生效 |
 | 目标语言 | 简体中文 / 繁體中文 / English / 日本語 / 한국어 |
 | 持久字典 | 翻译过的句子写入 `dictionary.json`，再次打开、重启、升级后直接复用，不再请求网络 |
+| 译文搜索 | 在 Windhawk 的搜索框里直接输入中文，自动翻译成英文后搜索，并显示「中文 → 英文」提示与还原按钮 |
 | 增量翻译 | 无限滚动、切换页面、切换 Mod 时新出现的内容自动翻译 |
 | 更新自愈 | Windhawk 更新覆盖 UI 文件后，扩展会在启动时（或文件变化时）重新打补丁，必要时自动刷新一次窗口 |
 | 无侵入 | 不修改 `windhawk.exe` / 引擎，不替换安装包，不接管更新流程；补丁失败时原 UI 不受影响 |
@@ -47,7 +48,7 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1 -WindhawkRoot "D:\Windhaw
 
 安装脚本会：
 
-1. 把伴生扩展复制到 `C:\ProgramData\Windhawk\UIData\extensions\local.windhawk-translate-1.1.2\`
+1. 把伴生扩展复制到 `C:\ProgramData\Windhawk\UIData\extensions\local.windhawk-translate-1.2.0\`
    并注册到同目录的 `extensions.json`（用户数据目录不参与 Windhawk 升级，扩展本身不会被覆盖）。
 2. 把页面脚本 `wh-translate.js` 复制到 webview 目录，并在 `index.html` 中注入一行
    `<script src="wh-translate.js?v=<内容哈希>"></script>`。
@@ -78,11 +79,23 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1 -WindhawkRoot "D:\Windhaw
 
 ![详情页译文模式](docs/details-translated.png)
 
+### 译文搜索
+
+Windhawk 的搜索是**本地**按 Mod ID / 名称 / 描述做子串匹配，所以直接输入中文是搜不到的。
+开启「译文搜索」（默认开启）后：
+
+- 在搜索框输入中文，停 0.7 秒后自动翻译成英文并交给 Windhawk 过滤；
+- 搜索框上方会显示 `译文搜索：任务栏 → task bar`，点「还原」可恢复中文原文，点「×」关闭提示；
+- 只对含中文的输入生效，输入英文时行为不变；
+- 翻译失败时会提示「翻译失败，已按原文搜索」，不会静默改词。
+
+可以在 ⚙ 设置里关闭这个功能。
+
 ### 设置（⚙）
 
 | 分组 | 项目 |
 | --- | --- |
-| 翻译 | 目标语言、翻译服务、以及所选服务的密钥/区域等配置 |
+| 翻译 | 目标语言、翻译服务、译文搜索开关，以及所选服务的密钥/区域等配置 |
 | 译文样式 | 字体（跟随界面/微软雅黑/宋体/思源黑体/等线）、字号（85%–120%）、行距（紧凑–很宽松）、颜色（6 个预设 + 取色器）、左侧竖线开关 |
 
 ![设置面板](docs/settings.png)
@@ -224,6 +237,12 @@ powershell -ExecutionPolicy Bypass -File .\uninstall.ps1 -Purge
 
 ## 更新日志
 
+### v1.2.0（2026-10-31）
+
+- **新增「译文搜索」**：搜索框输入中文（如「任务栏」「开始菜单」「音量」）时自动翻译成英文再搜索，
+  并在搜索框上方显示「中文 → 英文」提示与还原按钮；可在设置里关闭。
+- 搜索提示条会自动避开结果列表（显示在搜索框上方、右对齐）。
+
 ### v1.1.2（2026-10-31）
 
 - **修复**：「译文」模式下 Mod 详情里的图片消失。原因是图片与说明文字在同一个 `<p>` 里
@@ -278,7 +297,7 @@ windhawk-translate/
 
 安装后运行时位置：
 
-- 扩展：`C:\ProgramData\Windhawk\UIData\extensions\local.windhawk-translate-1.1.2\`
+- 扩展：`C:\ProgramData\Windhawk\UIData\extensions\local.windhawk-translate-1.2.0\`
 - 数据：`C:\ProgramData\Windhawk\Translate\`
 - 注入：`G:\Windhawk\UI\resources\app\extensions\windhawk\webview\wh-translate.js`（+ `index.html` 一行 script）
 - CSP：`G:\Windhawk\UI\resources\app\extensions\windhawk\dist\extension.js` 中 `connect-src` 追加白名单
@@ -299,3 +318,6 @@ windhawk-translate/
 - v1.1.1 回归：走查 首页 → 浏览（滚动加载 30/60/90 张卡片）→ 详情 → 更新日志 → 源代码（Monaco）→ 返回 →
   安装 Mod → 设置页 → 三种模式切换，全程无 `Unexpected Application Error`、无 console 异常；
   安装 Mod 的完整流程（新增卡片、列表刷新）也不再触发 `insertBefore` 崩溃。
+- v1.1.2 回归：`Windows 11 Taskbar Styler` 详情页 43 张图片，译文态 43/43 可见。
+- v1.2.0 回归：搜索「任务栏」→ `task bar`（任务栏相关 Mod）、「开始菜单」→ `start menu`、
+  「时钟」→ `clock`、「音量」→ `volume` 均返回正确结果；「还原」恢复中文、清空搜索框后提示自动消失。

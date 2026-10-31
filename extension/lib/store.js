@@ -80,6 +80,7 @@ class Store {
       provider: 'auto',
       concurrency: 4,
       collapsed: true,
+      querySearch: true,
       style: {
         fontFamily: '',
         fontSize: 0.95,
@@ -161,7 +162,15 @@ class Store {
   }
 
   updateSettings(patch) {
-    const allowed = ['enabled', 'mode', 'target', 'provider', 'concurrency', 'collapsed'];
+    const allowed = [
+      'enabled',
+      'mode',
+      'target',
+      'provider',
+      'concurrency',
+      'collapsed',
+      'querySearch',
+    ];
     let changed = false;
     for (const key of allowed) {
       if (patch && Object.prototype.hasOwnProperty.call(patch, key)) {

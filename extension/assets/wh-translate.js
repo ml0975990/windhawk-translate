@@ -12,7 +12,7 @@
 'use strict';
 
 (function () {
-  var VERSION = '1.1.2';
+  var VERSION = '1.2.0';
 
   if (window.__windhawkTranslate) return;
   window.__windhawkTranslate = { version: VERSION };
@@ -95,6 +95,16 @@
     failedCount: 0,
     apiOnline: false,
     saveTimer: 0,
+    // Search-by-translation: a Chinese query is translated to English before it
+    // is handed to Windhawk's (client-side) filter.
+    querySearch: true,
+    queryInput: null,
+    queryHint: null,
+    queryOriginal: '',
+    queryTimer: 0,
+    querySeq: 0,
+    queryApplying: false,
+    queryCache: {},
   };
 
   var doc = document;
@@ -287,6 +297,7 @@
     if (localCollapsed !== null) state.collapsed = localCollapsed !== '0';
     if (settings.style) state.style = Object.assign({}, state.style, settings.style);
     if (settings.providers) state.providers = settings.providers;
+    if (typeof settings.querySearch === 'boolean') state.querySearch = settings.querySearch;
   }
 
   function readLocal(name) {
@@ -331,6 +342,7 @@
       collapsed: state.collapsed,
       style: state.style,
       providers: state.providers,
+      querySearch: state.querySearch,
     });
   }
 
@@ -514,6 +526,11 @@
     '.whtr-inline{display:flex;align-items:center;gap:6px}',
     '.whtr-cfg{display:none;margin:4px 0 2px;padding:6px 8px;background:rgba(255,255,255,.04);border-radius:8px}',
     '.whtr-cfg.whtr-cfg-on{display:block}',
+    '.whtr-qhint{position:fixed;z-index:2147483002;display:none;align-items:center;gap:6px;padding:5px 8px;border-radius:8px;background:#1e1f24;border:1px solid rgba(255,255,255,.14);box-shadow:0 6px 20px rgba(0,0,0,.45);font:12px/1.4 "Segoe UI","Microsoft YaHei",sans-serif;color:#c8cede;max-width:min(90vw,620px);}',
+    '.whtr-qhint.whtr-open{display:flex}',
+    '.whtr-qhint b{color:#8ab4ff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;}',
+    '.whtr-qhint button{appearance:none;border:0;background:rgba(255,255,255,.08);color:#c8cede;font:inherit;padding:2px 6px;border-radius:5px;cursor:pointer;flex:none;}',
+    '.whtr-qhint button:hover{background:rgba(255,255,255,.16);color:#fff}',
   ].join('\n');
 
   var ui = { fab: null, bar: null, statusDot: null, statusText: null, pop: null, cfg: null };
@@ -702,6 +719,29 @@
     cfg.className = 'whtr-cfg';
     wrap.appendChild(cfg);
     ui.cfg = cfg;
+
+    var queryRow = doc.createElement('div');
+    queryRow.className = 'whtr-row';
+    var queryLabel = doc.createElement('label');
+    queryLabel.textContent = '译文搜索';
+    var queryToggle = doc.createElement('input');
+    queryToggle.type = 'checkbox';
+    queryToggle.checked = state.querySearch !== false;
+    queryToggle.addEventListener('change', function () {
+      state.querySearch = queryToggle.checked;
+      if (!state.querySearch) hideQueryHint();
+      pushSettings();
+    });
+    queryRow.appendChild(queryLabel);
+    queryRow.appendChild(queryToggle);
+    wrap.appendChild(queryRow);
+
+    var queryNote = doc.createElement('div');
+    queryNote.className = 'whtr-note';
+    queryNote.style.borderTop = '0';
+    queryNote.style.marginTop = '0';
+    queryNote.textContent = '中文关键词先翻译成英文再搜索';
+    wrap.appendChild(queryNote);
 
     var groupStyle = doc.createElement('div');
     groupStyle.className = 'whtr-group';
@@ -1212,6 +1252,212 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Search by translation
+  //
+  // Windhawk filters repository mods locally by mod id / name / description.
+  // When the user types a Chinese query we translate it to English, hand the
+  // English text to the app's filter and show what was searched.
+  // ---------------------------------------------------------------------------
+
+  function isSearchInput(el) {
+    if (!el || el.tagName !== 'INPUT' || el.type !== 'text') return false;
+    var placeholder = el.getAttribute('placeholder') || '';
+    return placeholder.indexOf('搜索') !== -1 || /search/i.test(placeholder);
+  }
+
+  function queryTranslate(text) {
+    var cacheKey = text.toLowerCase();
+    if (state.queryCache[cacheKey]) return Promise.resolve(state.queryCache[cacheKey]);
+    var url =
+      'https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q=' +
+      encodeURIComponent(text);
+    return fetchWithTimeout(url, {}, 8000)
+      .then(function (r) {
+        if (!r.ok) throw new Error('google http ' + r.status);
+        return r.json();
+      })
+      .then(function (json) {
+        var out = '';
+        if (json && json[0]) {
+          for (var i = 0; i < json[0].length; i++) {
+            if (json[0][i] && typeof json[0][i][0] === 'string') out += json[0][i][0];
+          }
+        }
+        out = out.trim();
+        if (!out) throw new Error('google empty');
+        return out;
+      })
+      .catch(function () {
+        var fallback =
+          'https://api.mymemory.translated.net/get?q=' +
+          encodeURIComponent(text) +
+          '&langpair=' +
+          encodeURIComponent('zh-CN') +
+          '%7Cen';
+        return fetchWithTimeout(fallback, {}, 8000)
+          .then(function (r) {
+            return r.json();
+          })
+          .then(function (json) {
+            var out = json && json.responseData && json.responseData.translatedText;
+            if (!out) throw new Error('mymemory empty');
+            return out.trim();
+          });
+      })
+      .then(function (out) {
+        state.queryCache[cacheKey] = out;
+        return out;
+      });
+  }
+
+  function ensureQueryHint() {
+    if (state.queryHint) return state.queryHint;
+    var hint = doc.createElement('div');
+    hint.className = 'whtr-qhint';
+    hint.setAttribute('data-whtr-ui', '1');
+    (doc.body || doc.documentElement).appendChild(hint);
+    state.queryHint = hint;
+    return hint;
+  }
+
+  function positionQueryHint() {
+    if (!state.queryHint || !state.queryHint.classList.contains('whtr-open')) return;
+    var input = state.queryInput;
+    if (!input || !input.isConnected) {
+      hideQueryHint();
+      return;
+    }
+    var rect = input.getBoundingClientRect();
+    if (rect.bottom < 0 || rect.top > (window.innerHeight || 0)) {
+      state.queryHint.classList.remove('whtr-open');
+      return;
+    }
+    var height = state.queryHint.offsetHeight || 28;
+    // Prefer the free space above the search box so the hint never covers the
+    // first row of results.
+    var top = rect.top - height - 6;
+    if (top < 4) top = rect.bottom + 6;
+    state.queryHint.style.top = Math.round(top) + 'px';
+    state.queryHint.style.minWidth = 'auto';
+    // Right-align to the search box: the area above its right side is free,
+    // while the left side holds the app logo.
+    var width = state.queryHint.offsetWidth || 240;
+    state.queryHint.style.left = Math.round(Math.max(8, rect.right - width)) + 'px';
+  }
+
+  var queryPositionRaf = 0;
+
+  function scheduleQueryHintPosition() {
+    if (queryPositionRaf) return;
+    queryPositionRaf = requestAnimationFrame(function () {
+      queryPositionRaf = 0;
+      positionQueryHint();
+    });
+  }
+
+  function hideQueryHint() {
+    state.querySeq++;
+    clearTimeout(state.queryTimer);
+    if (state.queryHint) state.queryHint.classList.remove('whtr-open');
+  }
+
+  function showQueryHint(chinese, english, note) {
+    var hint = ensureQueryHint();
+    hint.innerHTML = '';
+    var label = doc.createElement('span');
+    label.textContent = '译文搜索：';
+    hint.appendChild(label);
+    var zh = doc.createElement('b');
+    zh.textContent = chinese;
+    hint.appendChild(zh);
+    if (english) {
+      var arrow = doc.createElement('span');
+      arrow.textContent = '→';
+      hint.appendChild(arrow);
+      var en = doc.createElement('b');
+      en.textContent = english;
+      hint.appendChild(en);
+      var restore = doc.createElement('button');
+      restore.textContent = '还原';
+      restore.title = '恢复中文关键词';
+      restore.addEventListener('click', function () {
+        if (state.queryInput && state.queryInput.isConnected) {
+          applyQueryValue(state.queryInput, chinese);
+        }
+        hideQueryHint();
+      });
+      hint.appendChild(restore);
+    }
+    if (note) {
+      var noteEl = doc.createElement('span');
+      noteEl.textContent = note;
+      noteEl.style.color = '#8f98ab';
+      hint.appendChild(noteEl);
+    }
+    var close = doc.createElement('button');
+    close.textContent = '×';
+    close.title = '关闭';
+    close.addEventListener('click', hideQueryHint);
+    hint.appendChild(close);
+    hint.classList.add('whtr-open');
+    positionQueryHint();
+  }
+
+  function applyQueryValue(input, value) {
+    try {
+      var view = doc.defaultView;
+      var setter = Object.getOwnPropertyDescriptor(view.HTMLInputElement.prototype, 'value').set;
+      state.queryApplying = true;
+      setter.call(input, value);
+      input.dispatchEvent(new view.Event('input', { bubbles: true }));
+    } catch (e) {
+      log('query apply failed: ' + e.message);
+    } finally {
+      state.queryApplying = false;
+    }
+  }
+
+  function runQueryTranslation(input, value) {
+    var seq = ++state.querySeq;
+    var query = value.trim();
+    queryTranslate(query)
+      .then(function (english) {
+        if (seq !== state.querySeq || !input.isConnected) return;
+        if (input.value.trim() !== query) return; // the user kept typing
+        var text = String(english || '').trim();
+        if (!text || text.toLowerCase() === query.toLowerCase()) {
+          hideQueryHint();
+          return;
+        }
+        state.queryOriginal = query;
+        applyQueryValue(input, text);
+        showQueryHint(query, text);
+        log('translated search "' + query + '" -> "' + text + '"');
+      })
+      .catch(function (e) {
+        if (seq !== state.querySeq) return;
+        log('query translation failed: ' + e.message);
+        showQueryHint(query, null, '翻译失败，已按原文搜索');
+      });
+  }
+
+  function onSearchInput(event) {
+    var target = event.target;
+    if (!isSearchInput(target)) return;
+    if (state.queryApplying) return;
+    state.queryInput = target;
+    clearTimeout(state.queryTimer);
+    var value = target.value;
+    if (!value.trim() || !/[\u4e00-\u9fff]/.test(value) || !state.querySearch) {
+      hideQueryHint();
+      return;
+    }
+    state.queryTimer = setTimeout(function () {
+      runQueryTranslation(target, value);
+    }, 700);
+  }
+
+  // ---------------------------------------------------------------------------
   // Lifecycle
   // ---------------------------------------------------------------------------
 
@@ -1231,6 +1477,7 @@
         }
         if (relevant || mutation.type === 'characterData') {
           scheduleScan();
+          scheduleQueryHintPosition();
           return;
         }
       }
@@ -1276,6 +1523,10 @@
     applyMode();
     updateStatus();
     startObserver();
+
+    doc.addEventListener('input', onSearchInput, true);
+    window.addEventListener('scroll', scheduleQueryHintPosition, true);
+    window.addEventListener('resize', scheduleQueryHintPosition);
 
     probeApi().then(function (online) {
       log('api ' + (online ? 'online: ' + state.apiBase : 'offline'));
