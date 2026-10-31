@@ -12,7 +12,7 @@
 'use strict';
 
 (function () {
-  var VERSION = '1.2.0';
+  var VERSION = '1.3.0';
 
   if (window.__windhawkTranslate) return;
   window.__windhawkTranslate = { version: VERSION };
@@ -209,7 +209,7 @@
     if (!node) return false;
     var el = node.nodeType === 1 ? node : node.parentElement;
     if (!el || !el.closest) return false;
-    return !!el.closest('.whtr-bar,.whtr-pop,.whtr-fab,.whtr-tr');
+    return !!el.closest('.whtr-bar,.whtr-pop,.whtr-fab,.whtr-editor,.whtr-tr');
   }
 
   // ---------------------------------------------------------------------------
@@ -531,6 +531,17 @@
     '.whtr-qhint b{color:#8ab4ff;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;}',
     '.whtr-qhint button{appearance:none;border:0;background:rgba(255,255,255,.08);color:#c8cede;font:inherit;padding:2px 6px;border-radius:5px;cursor:pointer;flex:none;}',
     '.whtr-qhint button:hover{background:rgba(255,255,255,.16);color:#fff}',
+    '.whtr-editor{position:fixed;z-index:2147483003;display:none;width:360px;max-width:calc(100vw - 24px);background:#1e1f24;border:1px solid rgba(255,255,255,.16);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.5);padding:10px;font:12px/1.5 "Segoe UI","Microsoft YaHei",sans-serif;color:#e9ecf3;box-sizing:border-box;}',
+    '.whtr-editor.whtr-open{display:block}',
+    '.whtr-editor .whtr-ed-title{color:#8f98ab;font-size:11px;margin-bottom:4px}',
+    '.whtr-editor .whtr-ed-src{color:#7f889b;font-size:11px;max-height:44px;overflow:auto;margin-bottom:6px;word-break:break-word;border-left:2px solid rgba(255,255,255,.12);padding-left:6px}',
+    '.whtr-editor textarea{width:100%;min-height:64px;max-height:220px;resize:vertical;background:#23252c;color:#e9ecf3;border:1px solid rgba(255,255,255,.16);border-radius:6px;padding:6px;font:inherit;outline:none;box-sizing:border-box;line-height:1.5}',
+    '.whtr-editor .whtr-ed-actions{display:flex;justify-content:flex-end;gap:6px;margin-top:8px}',
+    '.whtr-editor button{appearance:none;border:0;background:rgba(255,255,255,.08);color:#c8cede;font:inherit;padding:4px 10px;border-radius:6px;cursor:pointer}',
+    '.whtr-editor button:hover{background:rgba(255,255,255,.16);color:#fff}',
+    '.whtr-editor button.whtr-primary{background:#4c8dff;color:#fff}',
+    '.whtr-editor button.whtr-primary:hover{background:#5f9bff}',
+    '.whtr-editor .whtr-ed-tip{color:#7f889b;font-size:11px;margin-top:6px}',
   ].join('\n');
 
   var ui = { fab: null, bar: null, statusDot: null, statusText: null, pop: null, cfg: null };
@@ -742,6 +753,13 @@
     queryNote.style.marginTop = '0';
     queryNote.textContent = '中文关键词先翻译成英文再搜索';
     wrap.appendChild(queryNote);
+
+    var editNote = doc.createElement('div');
+    editNote.className = 'whtr-note';
+    editNote.style.borderTop = '0';
+    editNote.style.marginTop = '0';
+    editNote.textContent = '提示：Ctrl+点击译文可更正，确认后写入字典';
+    wrap.appendChild(editNote);
 
     var groupStyle = doc.createElement('div');
     groupStyle.className = 'whtr-group';
@@ -1181,6 +1199,7 @@
         node.setAttribute('data-whtr-tr', '1');
         node.setAttribute('data-whtr-key', unit.key);
         unit.node = node;
+        node.__whtrUnit = unit;
       }
       if (node.textContent !== translation) node.textContent = translation;
 
@@ -1458,6 +1477,182 @@
   }
 
   // ---------------------------------------------------------------------------
+  // Manual translation correction (Ctrl + left click on a translation)
+  // ---------------------------------------------------------------------------
+
+  var editor = { el: null, area: null, src: null, unit: null, openAt: 0 };
+
+  function ensureEditor() {
+    if (editor.el) return editor.el;
+    var el = doc.createElement('div');
+    el.className = 'whtr-editor';
+    el.setAttribute('data-whtr-ui', '1');
+
+    var title = doc.createElement('div');
+    title.className = 'whtr-ed-title';
+    title.textContent = '更正译文';
+    el.appendChild(title);
+
+    var src = doc.createElement('div');
+    src.className = 'whtr-ed-src';
+    el.appendChild(src);
+
+    var area = doc.createElement('textarea');
+    area.spellcheck = false;
+    el.appendChild(area);
+
+    var actions = doc.createElement('div');
+    actions.className = 'whtr-ed-actions';
+    var cancel = doc.createElement('button');
+    cancel.textContent = '取消';
+    cancel.addEventListener('click', function () {
+      closeEditor();
+    });
+    var save = doc.createElement('button');
+    save.className = 'whtr-primary';
+    save.textContent = '确认';
+    save.addEventListener('click', function () {
+      commitEditor();
+    });
+    actions.appendChild(cancel);
+    actions.appendChild(save);
+    el.appendChild(actions);
+
+    var tip = doc.createElement('div');
+    tip.className = 'whtr-ed-tip';
+    tip.textContent = 'Enter 确认 · Shift+Enter 换行 · Esc 取消';
+    el.appendChild(tip);
+
+    area.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeEditor();
+        return;
+      }
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        commitEditor();
+      }
+    });
+
+    (doc.body || doc.documentElement).appendChild(el);
+
+    doc.addEventListener(
+      'click',
+      function (event) {
+        if (!editor.el || !editor.el.classList.contains('whtr-open')) return;
+        if (Date.now() - editor.openAt < 300) return; // ignore the opening click
+        var target = event.target;
+        if (target && target.closest && target.closest('.whtr-editor')) return;
+        closeEditor();
+      },
+      true
+    );
+
+    editor.el = el;
+    editor.area = area;
+    editor.src = src;
+    return el;
+  }
+
+  function openEditor(node) {
+    var unit = node.__whtrUnit;
+    if (!unit) {
+      state.registry.forEach(function (candidate) {
+        if (!unit && candidate.node === node) unit = candidate;
+      });
+    }
+    if (!unit || !unit.el.isConnected) {
+      log('correction: no unit for this translation');
+      return;
+    }
+    var el = ensureEditor();
+    editor.unit = unit;
+    editor.openAt = Date.now();
+    editor.src.textContent = unit.text.length > 180 ? unit.text.slice(0, 180) + '…' : unit.text;
+    editor.area.value = node.textContent;
+    el.classList.add('whtr-open');
+    positionEditor(node);
+    editor.area.focus();
+    editor.area.select();
+  }
+
+  function positionEditor(node) {
+    var el = editor.el;
+    var rect = node.getBoundingClientRect();
+    var width = el.offsetWidth || 360;
+    var height = el.offsetHeight || 190;
+    var viewportWidth = window.innerWidth || 0;
+    var viewportHeight = window.innerHeight || 0;
+    var left = Math.min(Math.max(8, rect.left), viewportWidth - width - 8);
+    var top = rect.bottom + 8;
+    if (top + height > viewportHeight - 8) top = Math.max(8, rect.top - height - 8);
+    el.style.left = Math.round(left) + 'px';
+    el.style.top = Math.round(top) + 'px';
+  }
+
+  function closeEditor() {
+    if (editor.el) editor.el.classList.remove('whtr-open');
+    editor.unit = null;
+  }
+
+  function commitEditor() {
+    var unit = editor.unit;
+    if (!unit) {
+      closeEditor();
+      return;
+    }
+    var value = String(editor.area.value || '').trim();
+    if (!value) {
+      closeEditor();
+      return;
+    }
+    if (unit.node && unit.node.textContent === value) {
+      closeEditor();
+      return;
+    }
+
+    // Apply to every rendered unit with the same source text, then persist.
+    state.dict.set(unit.key, value);
+    state.registry.forEach(function (candidate) {
+      if (candidate.key === unit.key && candidate.node) candidate.node.textContent = value;
+    });
+
+    if (state.apiBase) {
+      apiFetch('/dict', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          target: state.target,
+          entries: [{ key: unit.key, s: unit.text, t: value, p: 'manual' }],
+        }),
+      })
+        .then(function () {
+          log('correction saved: "' + unit.text.slice(0, 40) + '" -> "' + value.slice(0, 40) + '"');
+        })
+        .catch(function (e) {
+          log('correction save failed: ' + e.message);
+        });
+    } else {
+      log('correction kept in memory only (dictionary service offline)');
+    }
+
+    closeEditor();
+    updateStatus();
+  }
+
+  function onDocumentClick(event) {
+    if (!event.ctrlKey || event.button !== 0) return;
+    var target = event.target;
+    if (!target || !target.closest) return;
+    var node = target.closest('.whtr-tr');
+    if (!node) return;
+    event.preventDefault();
+    event.stopPropagation();
+    openEditor(node);
+  }
+
+  // ---------------------------------------------------------------------------
   // Lifecycle
   // ---------------------------------------------------------------------------
 
@@ -1525,6 +1720,7 @@
     startObserver();
 
     doc.addEventListener('input', onSearchInput, true);
+    doc.addEventListener('click', onDocumentClick, true);
     window.addEventListener('scroll', scheduleQueryHintPosition, true);
     window.addEventListener('resize', scheduleQueryHintPosition);
 

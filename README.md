@@ -23,6 +23,7 @@
 | 目标语言 | 简体中文 / 繁體中文 / English / 日本語 / 한국어 |
 | 持久字典 | 翻译过的句子写入 `dictionary.json`，再次打开、重启、升级后直接复用，不再请求网络 |
 | 译文搜索 | 在 Windhawk 的搜索框里直接输入中文，自动翻译成英文后搜索，并显示「中文 → 英文」提示与还原按钮 |
+| 译文更正 | **Ctrl+左键点击**任意译文弹出编辑框，确认后写回字典立即生效（取消则不改动） |
 | 增量翻译 | 无限滚动、切换页面、切换 Mod 时新出现的内容自动翻译 |
 | 更新自愈 | Windhawk 更新覆盖 UI 文件后，扩展会在启动时（或文件变化时）重新打补丁，必要时自动刷新一次窗口 |
 | 无侵入 | 不修改 `windhawk.exe` / 引擎，不替换安装包，不接管更新流程；补丁失败时原 UI 不受影响 |
@@ -48,7 +49,7 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1 -WindhawkRoot "D:\Windhaw
 
 安装脚本会：
 
-1. 把伴生扩展复制到 `C:\ProgramData\Windhawk\UIData\extensions\local.windhawk-translate-1.2.0\`
+1. 把伴生扩展复制到 `C:\ProgramData\Windhawk\UIData\extensions\local.windhawk-translate-1.3.0\`
    并注册到同目录的 `extensions.json`（用户数据目录不参与 Windhawk 升级，扩展本身不会被覆盖）。
 2. 把页面脚本 `wh-translate.js` 复制到 webview 目录，并在 `index.html` 中注入一行
    `<script src="wh-translate.js?v=<内容哈希>"></script>`。
@@ -90,6 +91,18 @@ Windhawk 的搜索是**本地**按 Mod ID / 名称 / 描述做子串匹配，所
 - 翻译失败时会提示「翻译失败，已按原文搜索」，不会静默改词。
 
 可以在 ⚙ 设置里关闭这个功能。
+
+### 译文更正
+
+机翻难免有不准确的地方，可以直接改：
+
+- 按住 **Ctrl** 用左键点击任意一条译文，弹出「更正译文」编辑框；
+- 编辑框上方显示原文，下面是你正在编辑的译文（默认全选，直接输入即可覆盖）；
+- **确认**（或 Enter）：写回本地字典并立即替换所有相同原文的译文，重启后依然生效；
+- **取消**（或 Esc）：不做任何修改；
+- Shift+Enter 换行，点击编辑框外面也会关闭。
+
+更正后的条目在 `dictionary.json` 里 `p` 字段为 `manual`，之后不会再被机翻覆盖。
 
 ### 设置（⚙）
 
@@ -237,6 +250,12 @@ powershell -ExecutionPolicy Bypass -File .\uninstall.ps1 -Purge
 
 ## 更新日志
 
+### v1.3.0（2026-10-31）
+
+- **新增「译文更正」**：Ctrl+左键点击译文弹出编辑框，确认后写回字典（`p: manual`）并立即替换所有相同原文的译文，
+  取消/Esc 不做修改；Enter 确认、Shift+Enter 换行。
+- 编辑框自动定位在译文附近，超出视口会自动翻到上方。
+
 ### v1.2.0（2026-10-31）
 
 - **新增「译文搜索」**：搜索框输入中文（如「任务栏」「开始菜单」「音量」）时自动翻译成英文再搜索，
@@ -297,7 +316,7 @@ windhawk-translate/
 
 安装后运行时位置：
 
-- 扩展：`C:\ProgramData\Windhawk\UIData\extensions\local.windhawk-translate-1.2.0\`
+- 扩展：`C:\ProgramData\Windhawk\UIData\extensions\local.windhawk-translate-1.3.0\`
 - 数据：`C:\ProgramData\Windhawk\Translate\`
 - 注入：`G:\Windhawk\UI\resources\app\extensions\windhawk\webview\wh-translate.js`（+ `index.html` 一行 script）
 - CSP：`G:\Windhawk\UI\resources\app\extensions\windhawk\dist\extension.js` 中 `connect-src` 追加白名单
@@ -321,3 +340,5 @@ windhawk-translate/
 - v1.1.2 回归：`Windows 11 Taskbar Styler` 详情页 43 张图片，译文态 43/43 可见。
 - v1.2.0 回归：搜索「任务栏」→ `task bar`（任务栏相关 Mod）、「开始菜单」→ `start menu`、
   「时钟」→ `clock`、「音量」→ `volume` 均返回正确结果；「还原」恢复中文、清空搜索框后提示自动消失。
+- v1.3.0 回归：Ctrl+点击译文弹出编辑框（原文/译文预填正确）→ 取消不改动 → 再次打开改文并确认后立即生效，
+  `dictionary.json` 出现 `p: "manual"` 条目，重载页面后更正仍然保留。
