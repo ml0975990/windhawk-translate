@@ -12,7 +12,7 @@
 'use strict';
 
 (function () {
-  var VERSION = '1.3.0';
+  var VERSION = '1.3.1';
 
   if (window.__windhawkTranslate) return;
   window.__windhawkTranslate = { version: VERSION };
@@ -1062,6 +1062,22 @@
       found.push({ el: el, kind: 'detailsDesc' });
     });
 
+    // The mod's own settings (labels and descriptions come from the mod YAML,
+    // so they are English; Windhawk's built-in labels are already localized and
+    // are skipped by isTargetLanguage).
+    var settingsScope =
+      '[class*="ModDetailsSettings"] .ant-list-item-meta-title,' +
+      '[class*="ModDetailsAdvanced"] .ant-list-item-meta-title';
+    doc.querySelectorAll(settingsScope).forEach(function (el) {
+      found.push({ el: el, kind: 'settingsTitle' });
+    });
+    var settingsDescScope =
+      '[class*="ModDetailsSettings"] .ant-list-item-meta-description,' +
+      '[class*="ModDetailsAdvanced"] .ant-list-item-meta-description';
+    doc.querySelectorAll(settingsDescScope).forEach(function (el) {
+      found.push({ el: el, kind: 'settingsDesc' });
+    });
+
     doc.querySelectorAll(MD_ROOT).forEach(function (root) {
       if (inExcludedContext(root)) return;
       var blocks = root.querySelectorAll('h1,h2,h3,h4,h5,h6,p,blockquote,li,td,th');
@@ -1203,7 +1219,11 @@
       }
       if (node.textContent !== translation) node.textContent = translation;
 
-      unit.isMarkdown = unit.kind === 'mdBlock' || unit.kind === 'mdItem';
+      unit.isMarkdown =
+        unit.kind === 'mdBlock' ||
+        unit.kind === 'mdItem' ||
+        unit.kind === 'settingsTitle' ||
+        unit.kind === 'settingsDesc';
       unit.el.setAttribute('data-whtr-orig', '1');
 
       var target = findAnchor(unit.el, unit.kind);

@@ -16,6 +16,7 @@
 | --- | --- |
 | 卡片翻译 | 首页「精选 Mods」、浏览页、已安装列表的 Mod 名称与描述 |
 | 详情页翻译 | 标题、简介、README 正文（标题/段落/列表/引用）、更新日志 |
+| 设置页翻译 | Mod 自己的设置项标签与说明（`设置` 页）；`高级设置` 里 Windhawk 自带文案本就是中文，不会重复翻译 |
 | 三种模式 | `原文`（关闭翻译）、`译文`（只显示中文）、`双语`（译文在上，原文在下并缩小到 85%） |
 | 折叠胶囊 | 平时缩到窗口右侧只显示「译」图标，点击展开模式栏；`»` 收起，点击空白处也会收起 |
 | 多种翻译服务 | 自动（Google → MyMemory → 微软）、Google、MyMemory（免密钥）；微软/必应、百度、阿里云、DeepL（需密钥） |
@@ -49,7 +50,7 @@ powershell -ExecutionPolicy Bypass -File .\install.ps1 -WindhawkRoot "D:\Windhaw
 
 安装脚本会：
 
-1. 把伴生扩展复制到 `C:\ProgramData\Windhawk\UIData\extensions\local.windhawk-translate-1.3.0\`
+1. 把伴生扩展复制到 `C:\ProgramData\Windhawk\UIData\extensions\local.windhawk-translate-1.3.1\`
    并注册到同目录的 `extensions.json`（用户数据目录不参与 Windhawk 升级，扩展本身不会被覆盖）。
 2. 把页面脚本 `wh-translate.js` 复制到 webview 目录，并在 `index.html` 中注入一行
    `<script src="wh-translate.js?v=<内容哈希>"></script>`。
@@ -105,6 +106,18 @@ Windhawk 的搜索是**本地**按 Mod ID / 名称 / 描述做子串匹配，所
 更正后的条目在 `dictionary.json` 里 `p` 字段为 `manual`，之后不会再被机翻覆盖。
 
 ![译文更正编辑框](docs/correction.png)
+
+### Mod 设置页
+
+Mod 自己的设置项（YAML 里定义的标签和说明）也会翻译，例如「Hotkeys → 快捷键」：
+
+- 「双语」：译文在上、英文原文在下并缩小；
+- 「译文」：只显示中文，开关/下拉框/输入框等控件保持原样可用。
+
+![Mod 设置页译文](docs/mod-settings.png)
+
+> 「高级设置」页里的「调试日志」「自定义进程包含列表」等是 Windhawk 自带文案，本身已是中文，
+> 会被语言检测跳过，不会出现重复翻译。
 
 ### 设置（⚙）
 
@@ -252,6 +265,12 @@ powershell -ExecutionPolicy Bypass -File .\uninstall.ps1 -Purge
 
 ## 更新日志
 
+### v1.3.1（2026-10-31）
+
+- **修复/补全**：Mod 详情页的「设置」标签页此前没有翻译。现在会翻译 Mod 自己定义的设置项
+  标签与说明（`ant-list-item-meta-title` / `ant-list-item-meta-description`），开关、下拉框、
+  输入框等控件不受影响；Windhawk 自带的中文文案（如「高级设置」页）会被语言检测跳过。
+
 ### v1.3.0（2026-10-31）
 
 - **新增「译文更正」**：Ctrl+左键点击译文弹出编辑框，确认后写回字典（`p: manual`）并立即替换所有相同原文的译文，
@@ -318,7 +337,7 @@ windhawk-translate/
 
 安装后运行时位置：
 
-- 扩展：`C:\ProgramData\Windhawk\UIData\extensions\local.windhawk-translate-1.3.0\`
+- 扩展：`C:\ProgramData\Windhawk\UIData\extensions\local.windhawk-translate-1.3.1\`
 - 数据：`C:\ProgramData\Windhawk\Translate\`
 - 注入：`G:\Windhawk\UI\resources\app\extensions\windhawk\webview\wh-translate.js`（+ `index.html` 一行 script）
 - CSP：`G:\Windhawk\UI\resources\app\extensions\windhawk\dist\extension.js` 中 `connect-src` 追加白名单
